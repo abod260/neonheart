@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ETERNAL // CORE</title>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800&display=swap');
+
+:root {
+  --red: #ff123d;
+  --pink: #ff668b;
+  --dark: #030205;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--dark);
+}
+
+body {
+  font-family: 'Orbitron', monospace;
+  color: white;
+  cursor: crosshair;
+}
+
+canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at center,
+      transparent 20%, rgba(0,0,0,.52) 100%);
+}
+
+.scanlines {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: .12;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 3px,
+    rgba(255,255,255,.08) 4px
+  );
+}
+
+.top {
+  position: fixed;
+  top: 30px;
+  left: 35px;
+  right: 35px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  letter-spacing: 3px;
+  color: rgba(255,110,135,.65);
+  text-transform: uppercase;
+}
+
+.brand {
+  position: fixed;
+  top: 13%;
+  width: 100%;
+  text-align: center;
+  font-size: clamp(21px, 4vw, 39px);
+  font-weight: 800;
+  letter-spacing: clamp(7px, 2vw, 17px);
+  text-indent: clamp(7px, 2vw, 17px);
+  text-shadow: 0 0 25px rgba(255,0,50,.7);
+  opacity: 0;
+  transform: translateY(12px);
+  transition: 1.4s ease;
+}
+
+.brand.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.subtitle {
+  position: fixed;
+  top: calc(13% + 53px);
+  width: 100%;
+  text-align: center;
+  font-size: 8px;
+  letter-spacing: 5px;
+  color: rgba(255,255,255,.45);
+  opacity: 0;
+  transition: 1.5s;
+}
+
+.subtitle.show {
+  opacity: 1;
+}
+
+.bottom {
+  position: fixed;
+  bottom: 9%;
+  width: 100%;
+  text-align: center;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: 1.5s;
+}
+
+.bottom.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.message {
+  font-size: clamp(10px, 1.5vw, 13px);
+  letter-spacing: 5px;
+  color: #ff6a89;
+  text-shadow: 0 0 18px #ff123d;
+}
+
+.small {
+  margin-top: 13px;
+  font-size: 8px;
+  letter-spacing: 3px;
+  color: rgba(255,255,255,.36);
+}
+
+.status {
+  position: fixed;
+  left: 35px;
+  bottom: 27px;
+  font-size: 8px;
+  letter-spacing: 2px;
+  color: rgba(255,80,110,.65);
+}
+
+.status span {
+  color: #ff315a;
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  50% { opacity: .2; }
+}
+
+@media(max-width:600px) {
+  .top { left: 15px; right: 15px; font-size: 7px; }
+  .status { left: 15px; bottom: 15px; }
+  .brand { top: 16%; }
+  .subtitle { top: calc(16% + 43px); }
+}
+</style>
+</head>
+
+<body>
+<canvas id="world"></canvas>
+
+<div class="overlay"></div>
+<div class="scanlines"></div>
+
+<div class="top">
+  <div>◈ ETERNAL SYSTEM</div>
+  <div>CORE // 001</div>
+</div>
+
+<div class="brand" id="brand">ETERNAL</div>
+<div class="subtitle" id="subtitle">TWO SOULS · ONE FREQUENCY</div>
+
+<div class="bottom" id="bottom">
+  <div class="message">CONNECTED FOREVER</div>
+  <div class="small">EVEN IN THE DARKNESS, YOU GLOW.</div>
+</div>
+
+<div class="status">SYSTEM STATUS: <span>● ONLINE</span></div>
+
+<script>
+const canvas = document.getElementById("world");
+const ctx = canvas.getContext("2d");
+
+const brand = document.getElementById("brand");
+const subtitle = document.getElementById("subtitle");
+const bottom = document.getElementById("bottom");
+
+let W, H, DPR;
+let start = performance.now();
+let last = start;
+let elapsed = 0;
+let stars = [];
+let sparks = [];
+let rings = [];
+let mouse = { x: 0, y: 0 };
+let pointer = { x: 0, y: 0 };
+
+const TAU = Math.PI * 2;
+
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth;
+  H = window.innerHeight;
+
+  canvas.width = W * DPR;
+  canvas.height = H * DPR;
+  canvas.style.width = W + "px";
+  canvas.style.height = H + "px";
+
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+  mouse.x = W / 2;
+  mouse.y = H / 2;
+
+  stars = Array.from({ length: Math.min(230, Math.floor(W * H / 4500)) }, () => ({
+    x: Math.random() * W,
+    y: Math.random() * H,
+    r: Math.random() * 1.4 + .2,
+    a: Math.random() * .65 + .1,
+    speed: Math.random() * 14 + 4
+  }));
+}
+
+window.addEventListener("resize", resize);
+
+window.addEventListener("pointermove", e => {
+  mouse.x = e.clientX;
+  mouse.y = e.clientY;
+  pointer.x = (e.clientX / W - .5) * 2;
+  pointer.y = (e.clientY / H - .5) * 2;
+});
+
+resize();
+
+function heartPoint(t, scale) {
+  const x = 16 * Math.pow(Math.sin(t), 3);
+  const y = -(13 * Math.cos(t)
+    - 5 * Math.cos(2*t)
+    - 2 * Math.cos(3*t)
+    - Math.cos(4*t));
+
+  return {
+    x: W/2 + x * scale,
+    y: H/2 + y * scale
+  };
+}
+
+function heartScale() {
+  return Math.min(W / 43, H / 37) * .76;
+}
+
+function glowLine(points, color, width, blur, alpha = 1) {
+  if (points.length < 2) return;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.shadowColor = color;
+  ctx.shadowBlur = blur;
+
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+
+  for (let i = 1; i < points.length; i++) {
+    ctx.lineTo(points[i].x, points[i].y);
+  }
+
+  ctx.stroke();
+  ctx.restore();
+}
+
+function background(dt) {
+  ctx.fillStyle = "rgba(3,2,5,.26)";
+  ctx.fillRect(0, 0, W, H);
+
+  for (const s of stars) {
+    s.y += s.speed * dt * .03;
+    if (s.y > H) {
+      s.y = 0;
+      s.x = Math.random() * W;
+    }
+
+    const twinkle = .55 + Math.sin(elapsed * 2 + s.x) * .35;
+
+    ctx.fillStyle = `rgba(255,90,120,${s.a * twinkle})`;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, TAU);
+    ctx.fill();
+  }
+
+  // Subtle red horizon.
+  const g = ctx.createRadialGradient(W/2, H/2, 10, W/2, H/2, H*.65);
+  g.addColorStop(0, "rgba(95,0,20,.10)");
+  g.addColorStop(1, "rgba(0,0,0,0)");
+
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function drawECG(t, alpha) {
+  if (alpha <= 0) return;
+
+  const y0 = H/2;
+  const left = W*.07;
+  const right = W*.93;
+  const width = right-left;
+  const sweep = (t*.44)%1;
+  const pts = [];
+
+  for (let i = 0; i <= 700; i++) {
+    const u = i/700;
+    const x = left + width*u;
+    const phase = ((u*3.3 - t*.44)%1+1)%1;
+    let pulse = 0;
+
+    if (phase > .27 && phase < .34) {
+      pulse = -7*Math.sin((phase-.27)/.07*Math.PI);
+    } else if (phase >= .34 && phase < .40) {
+      pulse = 42*Math.sin((phase-.34)/.06*Math.PI);
+    } else if (phase >= .40 && phase < .46) {
+      pulse = -15*Math.sin((phase-.40)/.06*Math.PI);
+    } else if (phase > .51 && phase < .72) {
+      pulse = -5*Math.sin((phase-.51)/.21*Math.PI);
+    }
+
+    pts.push({ x, y: y0+pulse });
+  }
+
+  glowLine(pts, "#ff183e", 2, 20, alpha);
+  glowLine(pts, "#ff9aa9", .65, 5, alpha*.85);
+
+  const sx = left + sweep*width;
+  const gradient = ctx.createRadialGradient(sx,y0,0,sx,y0,34);
+  gradient.addColorStop(0, `rgba(255,75,110,${alpha})`);
+  gradient.addColorStop(1, "rgba(255,0,30,0)");
+
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.arc(sx,y0,34,0,TAU);
+  ctx.fill();
+
+  // Tiny scan cursor.
+  ctx.fillStyle = `rgba(255,220,230,${alpha})`;
+  ctx.beginPath();
+  ctx.arc(sx,y0,2.3,0,TAU);
+  ctx.fill();
+}
+
+function addBurst(x,y,count=24) {
+  for (let i=0;i<count;i++) {
+    const a = Math.random()*TAU;
+    const speed = Math.random()*170+35;
+
+    sparks.push({
+      x,y,
+      vx: Math.cos(a)*speed,
+      vy: Math.sin(a)*speed,
+      life: Math.random()*.7+.25,
+      max: .95,
+      size: Math.random()*2+0.5
+    });
+  }
+}
+
+function drawRings(dt, active) {
+  if (!active) return;
+
+  if (Math.random() < .045) {
+    rings.push({ r: 8, life: 1 });
+  }
+
+  for (let i=rings.length-1;i>=0;i--) {
+    const r = rings[i];
+    r.r += 95*dt;
+    r.life -= dt*.55;
+
+    ctx.save();
+    ctx.strokeStyle = `rgba(255,35,70,${Math.max(0,r.life)*.3})`;
+    ctx.lineWidth = 1;
+    ctx.shadowColor = "#ff123d";
+    ctx.shadowBlur = 14;
+    ctx.beginPath();
+    ctx.ellipse(W/2,H/2,r.r,r.r*.48,0,0,TAU);
+    ctx.stroke();
+    ctx.restore();
+
+    if (r.life <= 0) rings.splice(i,1);
+  }
+}
+
+function drawHeart(t, alpha) {
+  if (alpha <= 0) return;
+
+  const scale = heartScale();
+  const beat = 1 + Math.pow(Math.max(0,Math.sin(t*3.2)), 10)*.075
+    + Math.sin(t*3.2)*.012;
+
+  const cx = W/2 - pointer.x*5;
+  const cy = H/2 - pointer.y*4;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(cx,cy);
+  ctx.scale(beat,beat);
+  ctx.translate(-W/2,-H/2);
+
+  const points = [];
+  const total = 700;
+
+  for (let i=0;i<=total;i++) {
+    const p = heartPoint(i/total*TAU,scale);
+    points.push(p);
+  }
+
+  // Deep aura.
+  const aura = ctx.createRadialGradient(W/2,H/2,2,W/2,H/2,scale*21);
+  aura.addColorStop(0,"rgba(255,0,42,.15)");
+  aura.addColorStop(.55,"rgba(130,0,28,.08)");
+  aura.addColorStop(1,"rgba(0,0,0,0)");
+
+  ctx.fillStyle = aura;
+  ctx.fillRect(0,0,W,H);
+
+  // Build the heart progressively.
+  const reveal = Math.min(1,Math.max(0,(t-2.6)/1.9));
+  const visible = Math.max(2,Math.floor(points.length*reveal));
+  const outline = points.slice(0,visible);
+
+  glowLine(outline,"#ff092f",4,32,1);
+  glowLine(outline,"#ff3159",1.5,17,1);
+  glowLine(outline,"#ffd0da",.45,5,.95);
+
+  // Moving energy traveling along the contour.
+  const head = (t*.34)%1;
+  for (let j=0;j<5;j++) {
+    const u = (head+j*.012)%1;
+    const p = heartPoint(u*TAU,scale*1.015);
+    const r = 3.5-j*.45;
+
+    ctx.save();
+    ctx.globalAlpha = alpha*(1-j/6);
+    ctx.fillStyle = "#fff1f5";
+    ctx.shadowColor = "#ff1644";
+    ctx.shadowBlur = 23;
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,r,0,TAU);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Electrical fractures.
+  ctx.save();
+  ctx.strokeStyle = "rgba(255,60,90,.9)";
+  ctx.lineWidth = 1;
+  ctx.shadowColor = "#ff123d";
+  ctx.shadowBlur = 14;
+
+  for (let j=0;j<15;j++) {
+    const index = Math.floor(((t*.09+j/15)%1)*total);
+    const p = points[index];
+    const len = 5+Math.random()*17;
+
+    ctx.beginPath();
+    ctx.moveTo(p.x,p.y);
+    ctx.lineTo(
+      p.x+(Math.random()-.5)*len,
+      p.y+(Math.random()-.5)*len
+    );
+    ctx.lineTo(
+      p.x+(Math.random()-.5)*len*1.8,
+      p.y+(Math.random()-.5)*len*1.8
+    );
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Floating particles around the heart.
+  for (let i=0;i<85;i++) {
+    const a = i/85*TAU+t*.17;
+    const radius = scale*(1.25+ .14*Math.sin(t*1.4+i));
+    const x = W/2+Math.cos(a)*radius*1.12;
+    const y = H/2+Math.sin(a)*radius*.88;
+    const flicker = .35+.65*Math.abs(Math.sin(t*2+i*3));
+
+    ctx.save();
+    ctx.globalAlpha = alpha*flicker;
+    ctx.fillStyle = i%4===0 ? "#ffd1dc" : "#ff244e";
+    ctx.shadowColor = "#ff123d";
+    ctx.shadowBlur = 12;
+    ctx.beginPath();
+    ctx.arc(x,y,i%6===0?2:1,0,TAU);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
+function updateSparks(dt) {
+  for (let i=sparks.length-1;i>=0;i--) {
+    const s = sparks[i];
+
+    s.x += s.vx*dt;
+    s.y += s.vy*dt;
+    s.vx *= .985;
+    s.vy *= .985;
+    s.life -= dt;
+
+    if (s.life <= 0) {
+      sparks.splice(i,1);
+      continue;
+    }
+
+    const alpha = Math.min(1,s.life/.3);
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = "#ff536f";
+    ctx.shadowColor = "#ff123d";
+    ctx.shadowBlur = 15;
+    ctx.beginPath();
+    ctx.arc(s.x,s.y,s.size,0,TAU);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+function animate(now) {
+  const dt = Math.min((now-last)/1000,.04);
+  last = now;
+  elapsed = (now-start)/1000;
+
+  ctx.clearRect(0,0,W,H);
+  background(dt);
+
+  // ECG intro, then a dramatic transition.
+  const ecgAlpha = 1-Math.min(1,Math.max(0,(elapsed-2.5)/1.2));
+  drawECG(elapsed,ecgAlpha);
+
+  // Heart materializes from the darkness.
+  const heartAlpha = Math.min(1,Math.max(0,(elapsed-2.6)/1.35));
+  drawHeart(elapsed,heartAlpha);
+
+  drawRings(dt,heartAlpha>.8);
+  updateSparks(dt);
+
+  // Occasional sparks from the core.
+  if (heartAlpha>.8 && Math.random()<.055) {
+    const scale = heartScale();
+    const p = heartPoint(Math.random()*TAU,scale);
+    addBurst(p.x,p.y,3+Math.floor(Math.random()*5));
+  }
+
+  if (elapsed>3.8) brand.classList.add("show");
+  if (elapsed>4.4) subtitle.classList.add("show");
+  if (elapsed>5.2) bottom.classList.add("show");
+
+  requestAnimationFrame(animate);
+}
+
+requestAnimationFrame(animate);
+
+// Click to release an energy burst.
+window.addEventListener("pointerdown", e => {
+  addBurst(e.clientX,e.clientY,38);
+});
+</script>
+</body>
+</html>
